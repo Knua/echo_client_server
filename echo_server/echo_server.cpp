@@ -22,50 +22,38 @@ thread echo_client[1001]; // thread arr
 bool using_client[1001]; // false -> now used, true -> used
 int client_childfd[1001];
 
-void echo(int sockfd, mutex& m, int now_index){
+void echo(int sockfd, int now_childfd, int now_index, mutex &m){
+
+	using_client[now_index] = true;
+	client_childfd[now_index] = now_childfd;
 	
-	m.lock();
-	struct sockaddr_in addr;
-	socklen_t clientlen = sizeof(sockaddr);
-	int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &clientlen);
-	m.unlock();
+	while (true) {
+		const static int BUFSIZE = 1024;
+		char buf[BUFSIZE];
 
-	if (childfd < 0) {
-		perror("ERROR on accept");
-	}
-	else{
-		printf("connected\n");
-		using_client[now_index] = true;
-		client_childfd[now_index] = childfd;
+		ssize_t received = recv(now_childfd, buf, BUFSIZE - 1, 0);
+		if (received == 0 || received == -1) {
+			perror("recv failed");
+			break;
+		}
+		buf[received] = '\0';
+		printf("%s\n", buf);
 
-		while (true) {
-			const static int BUFSIZE = 1024;
-			char buf[BUFSIZE];
-
-			ssize_t received = recv(childfd, buf, BUFSIZE - 1, 0);
-			if (received == 0 || received == -1) {
-				perror("recv failed");
-				break;
-			}
-			buf[received] = '\0';
-			printf("%s\n", buf);
-
-			int checksum = 0;
-			if(b_opt_check){
-				for(int i = 0; i < 1001; i++){
-					if(using_client[i]) checksum += send(client_childfd[i], buf, strlen(buf), 0);
-				}
-			}
-			else checksum += send(childfd, buf, strlen(buf), 0);
-			if (checksum == 0) {
-				perror("send failed");
-				break;
+		int checksum = 0;
+		if(b_opt_check){
+			for(int i = 0; i < 1001; i++){
+				if(using_client[i]) checksum += send(client_childfd[i], buf, strlen(buf), 0);
 			}
 		}
-		m.lock();
-		using_client[now_index] = false;
-		m.unlock();
+		else checksum += send(now_childfd, buf, strlen(buf), 0);
+		if (checksum == 0) {
+			perror("send failed");
+			break;
+		}
 	}
+	m.lock();
+	using_client[now_index] = false;
+	m.unlock();
 }
 
 int main(int argc, char  * argv[]) 
@@ -110,16 +98,24 @@ int main(int argc, char  * argv[])
 	}
 
 	mutex M;
-	while (true) {
+	while(1) {
 		int now_index = -1;
 		for(int i = 0; i < 1001; i++){
 			if(!using_client[i]) now_index = i;
 		}
 		if(now_index == -1) continue;
-		echo_client[now_index] = thread(sockfd, ref(M), now_index);
+
+		struct sockaddr_in addr;
+		socklen_t clientlen = sizeof(sockaddr);
+		int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &clientlen);
+
+		if (childfd < 0) {
+			perror("ERROR on accept");
+			return -1;
+		}
+		printf("connected\n");
+		echo_client[now_index] = thread(echo, sockfd, childfd, now_index, ref(M));
 	}
 
 	close(sockfd);
 }
-
-// void *echo(int sockfd, std::set<int>& socket_descriptor){
