@@ -5,12 +5,12 @@
 #include <arpa/inet.h> // for htons
 #include <netinet/in.h> // for sockaddr_in
 #include <sys/socket.h> // for socket
+#include <pthread.h> // for thread
 
-#include <set> // for managing socket descriptor
+#include <thread> // for thread
 #include <mutex> // for lock
-#include <thread>
 
-using std::thread;
+using namespace std;
 
 bool b_opt_check = false;
 void usage() {
@@ -18,20 +18,25 @@ void usage() {
     printf("sample: echo_server 1234 -b\n");
 }
 
-void echo_thread(int sockfd, std::set<int> socket_descriptor, std::mutex &m){
+thread echo_client[1001]; // thread arr
+bool using_client[1001]; // false -> now used, true -> used
+int client_childfd[1001];
 
+void echo(int sockfd, mutex& m, int now_index){
+	
 	m.lock();
 	struct sockaddr_in addr;
 	socklen_t clientlen = sizeof(sockaddr);
 	int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &clientlen);
-	
+	m.unlock();
+
 	if (childfd < 0) {
 		perror("ERROR on accept");
 	}
 	else{
 		printf("connected\n");
-		socket_descriptor.insert(childfd);
-		m.unlock();
+		using_client[now_index] = true;
+		client_childfd[now_index] = childfd;
 
 		while (true) {
 			const static int BUFSIZE = 1024;
@@ -47,8 +52,8 @@ void echo_thread(int sockfd, std::set<int> socket_descriptor, std::mutex &m){
 
 			int checksum = 0;
 			if(b_opt_check){
-				for(std::set<int>::iterator it = socket_descriptor.begin(); it != socket_descriptor.end(); it++){
-					checksum += send(*it, buf, strlen(buf), 0);
+				for(int i = 0; i < 1001; i++){
+					if(using_client[i]) checksum += send(client_childfd[i], buf, strlen(buf), 0);
 				}
 			}
 			else checksum += send(childfd, buf, strlen(buf), 0);
@@ -57,9 +62,8 @@ void echo_thread(int sockfd, std::set<int> socket_descriptor, std::mutex &m){
 				break;
 			}
 		}
-
 		m.lock();
-		socket_descriptor.erase(childfd);
+		using_client[now_index] = false;
 		m.unlock();
 	}
 }
@@ -105,12 +109,17 @@ int main(int argc, char  * argv[])
 		return -1;
 	}
 
-	std::mutex M;
-	std::set<int> socket_descriptor;
+	mutex M;
 	while (true) {
-		thread echo = thread(echo_thread, std::ref(sockfd), std::ref(socket_descriptor), std::ref(M));
-		// echo.detach();
+		int now_index = -1;
+		for(int i = 0; i < 1001; i++){
+			if(!using_client[i]) now_index = i;
+		}
+		if(now_index == -1) continue;
+		echo_client[now_index] = thread(sockfd, ref(M), now_index);
 	}
 
 	close(sockfd);
 }
+
+// void *echo(int sockfd, std::set<int>& socket_descriptor){
