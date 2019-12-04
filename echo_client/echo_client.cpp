@@ -43,7 +43,7 @@ int main() {
 			perror("recv failed");
 			break;
 		}
-		buf[received] = '\0';
+		buf[received] = '\0'; // cut buffer overflow
 		printf("%s\n", buf);
 	}
 

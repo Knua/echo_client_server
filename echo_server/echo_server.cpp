@@ -27,7 +27,7 @@ int main() {
 		return -1;
 	}
 
-	res = listen(sockfd, 2);
+	res = listen(sockfd, 2); // backlog
 	if (res == -1) {
 		perror("listen failed");
 		return -1;
@@ -37,13 +37,18 @@ int main() {
 		struct sockaddr_in addr;
 		socklen_t clientlen = sizeof(sockaddr);
 		int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &clientlen);
+			// we must manage this by using list
 		if (childfd < 0) {
 			perror("ERROR on accept");
 			break;
 		}
 		printf("connected\n");
 
-		while (true) {
+		// we must fork or thread in this line
+			// pthread, standard thread (recommanded)
+		// Additionally, we must implement "echo broadcast" option
+
+		while (true) { // two or more client can't connect in the same time..
 			const static int BUFSIZE = 1024;
 			char buf[BUFSIZE];
 
@@ -60,6 +65,8 @@ int main() {
 				perror("send failed");
 				break;
 			}
+			// if break is detected, we must pop that in list
+			// we must use "lock" because we use insert and delete in "same list"
 		}
 	}
 
