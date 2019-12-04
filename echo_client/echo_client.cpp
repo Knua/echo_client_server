@@ -6,6 +6,12 @@
 #include <netinet/in.h> // for sockaddr_in
 #include <sys/socket.h> // for socket
 
+#include <fcntl.h>
+#include <termios.h> // for detecting keyboard input
+
+using namespace std;
+#define BUFSIZE 1024
+
 void usage() {
     printf("syntax: echo_client <host> <port>\n");
     printf("sample: echo_client 127.0.0.1 1234\n");
@@ -42,10 +48,9 @@ int main(int argc, char * argv[])
 	}
 	printf("connected\n");
 
-	while (true) {
-		const static int BUFSIZE = 1024;
-		char buf[BUFSIZE];
-
+	char buf[BUFSIZE];
+	memset(buf, '\0', sizeof(buf));
+	while(1){
 		scanf("%s", buf);
 		if (strcmp(buf, "quit") == 0) break;
 
@@ -54,7 +59,7 @@ int main(int argc, char * argv[])
 			perror("send failed");
 			break;
 		}
-
+	
 		ssize_t received = recv(sockfd, buf, BUFSIZE - 1, 0);
 		if (received == 0 || received == -1) {
 			perror("recv failed");
@@ -63,6 +68,5 @@ int main(int argc, char * argv[])
 		buf[received] = '\0'; // cut buffer overflow
 		printf("%s\n", buf);
 	}
-
 	close(sockfd);
 }

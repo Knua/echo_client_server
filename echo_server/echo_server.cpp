@@ -5,7 +5,6 @@
 #include <arpa/inet.h> // for htons
 #include <netinet/in.h> // for sockaddr_in
 #include <sys/socket.h> // for socket
-#include <pthread.h> // for thread
 
 #include <thread> // for thread
 #include <mutex> // for lock
@@ -19,14 +18,10 @@ void usage() {
 }
 
 thread echo_client[1001]; // thread arr
-bool using_client[1001]; // false -> now used, true -> used
+bool using_client[1001]; // false -> not used, true -> used
 int client_childfd[1001];
 
-void echo(int sockfd, int now_childfd, int now_index, mutex &m){
-
-	using_client[now_index] = true;
-	client_childfd[now_index] = now_childfd;
-	
+void echo(int now_childfd, int now_index, mutex &m){
 	while (true) {
 		const static int BUFSIZE = 1024;
 		char buf[BUFSIZE];
@@ -42,7 +37,9 @@ void echo(int sockfd, int now_childfd, int now_index, mutex &m){
 		int checksum = 0;
 		if(b_opt_check){
 			for(int i = 0; i < 1001; i++){
-				if(using_client[i]) checksum += send(client_childfd[i], buf, strlen(buf), 0);
+				if(using_client[i]){
+					checksum += send(client_childfd[i], buf, strlen(buf), 0);
+				}
 			}
 		}
 		else checksum += send(now_childfd, buf, strlen(buf), 0);
@@ -97,13 +94,10 @@ int main(int argc, char  * argv[])
 		return -1;
 	}
 
+	memset(using_client, false, sizeof(using_client));
+	memset(client_childfd, 0, sizeof(client_childfd));
 	mutex M;
 	while(1) {
-		int now_index = -1;
-		for(int i = 0; i < 1001; i++){
-			if(!using_client[i]) now_index = i;
-		}
-		if(now_index == -1) continue;
 
 		struct sockaddr_in addr;
 		socklen_t clientlen = sizeof(sockaddr);
@@ -113,8 +107,20 @@ int main(int argc, char  * argv[])
 			perror("ERROR on accept");
 			return -1;
 		}
+
+		int now_index = -1;
+		for(int i = 0; i < 1001; i++){
+			if(!using_client[i]){
+				now_index = i;
+				break;
+			}
+		}
+		if(now_index == -1) continue;
 		printf("connected\n");
-		echo_client[now_index] = thread(echo, sockfd, childfd, now_index, ref(M));
+
+		using_client[now_index] = true;
+		client_childfd[now_index] = childfd;
+		echo_client[now_index] = thread(echo, childfd, now_index, ref(M));
 	}
 
 	close(sockfd);
