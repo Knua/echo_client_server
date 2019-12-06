@@ -37,11 +37,14 @@ void echo(int now_childfd){
 		printf("%s\n", buf);
 
 		if(b_opt_check){
+			m.lock();
+			bool error_chk = false;
 			for(auto it = client_childfd.begin(); it != client_childfd.end(); it++){
 				if(send(*it, buf, strlen(buf), 0) == 0){
 					client_childfd.erase(it);
 				}
 			}
+			m.unlock();
 		}
 		else if (send(now_childfd, buf, strlen(buf), 0) == 0) {
 			perror("send failed");
@@ -98,12 +101,12 @@ int main(int argc, char  * argv[])
 		struct sockaddr_in new_addr;
 		socklen_t clientlen = sizeof(sockaddr);
 		
-		m.lock();
 		int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&new_addr), &clientlen);
 		if (childfd < 0) {
 			perror("ERROR on accept");
 			return -1;
 		}
+		m.lock();
 		client_childfd.push_back(childfd);
 		m.unlock();
 
