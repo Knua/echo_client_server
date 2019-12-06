@@ -25,7 +25,6 @@ list<int> client_childfd;
 
 void echo(int now_childfd){
 	while (true) {
-		printf("now_childfd: %d\n", now_childfd);
 		if(find(client_childfd.begin(), client_childfd.end(), now_childfd) == client_childfd.end()) break;
 
 		char buf[BUF_SIZE];
@@ -38,13 +37,11 @@ void echo(int now_childfd){
 		printf("%s\n", buf);
 
 		if(b_opt_check){
-			m.lock();
-			for(list<int>::iterator it = client_childfd.begin(); it != client_childfd.end(); it++){
+			for(auto it = client_childfd.begin(); it != client_childfd.end(); it++){
 				if(send(*it, buf, strlen(buf), 0) == 0){
 					client_childfd.erase(it);
 				}
 			}
-			m.unlock();
 		}
 		else if (send(now_childfd, buf, strlen(buf), 0) == 0) {
 			perror("send failed");

@@ -6,8 +6,7 @@
 #include <netinet/in.h> // for sockaddr_in
 #include <sys/socket.h> // for socket
 
-#include <fcntl.h>
-#include <termios.h> // for detecting keyboard input
+#include <thread>
 
 using namespace std;
 #define BUFSIZE 1024
@@ -15,6 +14,34 @@ using namespace std;
 void usage() {
     printf("syntax: echo_client <host> <port>\n");
     printf("sample: echo_client 127.0.0.1 1234\n");
+}
+
+void send_echo(int sockfd, char * buf){
+	while(true){
+		memset(buf, '\0', sizeof(buf));
+
+		scanf("%s", buf);
+		if (strcmp(buf, "quit") == 0) break;
+
+		ssize_t sent = send(sockfd, buf, strlen(buf), 0);
+		if (sent == 0) {
+			perror("send failed");
+			break;
+		}
+	}
+}
+void recv_echo(int sockfd, char * buf){
+	while(true){
+		memset(buf, '\0', sizeof(buf));
+
+		ssize_t received = recv(sockfd, buf, BUFSIZE - 1, 0);
+		if (received == 0 || received == -1) {
+			perror("recv failed");
+			break;
+		}
+		buf[received] = '\0'; // cut buffer overflow
+		printf("%s\n", buf);
+	}
 }
 
 int main(int argc, char * argv[]) 
@@ -48,25 +75,14 @@ int main(int argc, char * argv[])
 	}
 	printf("connected\n");
 
-	char buf[BUFSIZE];
-	memset(buf, '\0', sizeof(buf));
-	while(1){
-		scanf("%s", buf);
-		if (strcmp(buf, "quit") == 0) break;
+	char send_buf[BUFSIZE];
+	char recv_buf[BUFSIZE];
 
-		ssize_t sent = send(sockfd, buf, strlen(buf), 0);
-		if (sent == 0) {
-			perror("send failed");
-			break;
-		}
-	
-		ssize_t received = recv(sockfd, buf, BUFSIZE - 1, 0);
-		if (received == 0 || received == -1) {
-			perror("recv failed");
-			break;
-		}
-		buf[received] = '\0'; // cut buffer overflow
-		printf("%s\n", buf);
-	}
+	thread send_thr = thread(send_echo, sockfd, send_buf);
+	thread recv_thr = thread(recv_echo, sockfd, recv_buf);
+
+	send_thr.join();
+	recv_thr.join();
+
 	close(sockfd);
 }
