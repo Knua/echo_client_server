@@ -7,6 +7,7 @@
 #include <sys/socket.h> // for socket
 
 #include <list> // for managing descriptor
+#include <algorithm> // for find
 #include <thread> // for thread
 #include <mutex> // for lock
 #define BUF_SIZE 1000
@@ -24,6 +25,7 @@ list<int> client_childfd;
 
 void echo(int now_childfd){
 	while (true) {
+		printf("now_childfd: %d\n", now_childfd);
 		if(find(client_childfd.begin(), client_childfd.end(), now_childfd) == client_childfd.end()) break;
 
 		char buf[BUF_SIZE];
@@ -95,19 +97,21 @@ int main(int argc, char  * argv[])
 		return -1;
 	}
 
-	m.lock();
-	struct sockaddr_in addr;
-	socklen_t clientlen = sizeof(sockaddr);
-	int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&addr), &clientlen);
+	while(true) {
+		struct sockaddr_in new_addr;
+		socklen_t clientlen = sizeof(sockaddr);
+		
+		m.lock();
+		int childfd = accept(sockfd, reinterpret_cast<struct sockaddr*>(&new_addr), &clientlen);
+		if (childfd < 0) {
+			perror("ERROR on accept");
+			return -1;
+		}
+		client_childfd.push_back(childfd);
+		m.unlock();
 
-	if (childfd < 0) {
-		perror("ERROR on accept");
-		return -1;
+		printf("connected\n");
+		thread(echo, childfd).detach();
 	}
-	client_childfd.push_back(childfd);
-	m.unlock();
-
-	printf("connected\n");
-	thread(echo, childfd);
 	close(sockfd);
 }
